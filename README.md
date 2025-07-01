@@ -68,73 +68,132 @@ eeg_seizure_detection/
 ## Getting started
 
 ### Prerequisites
-- Python 3.10+  
-- PyTorch, numpy, scipy, matplotlib, wfdb, MNE (see `requirements.txt`)
+- **Python** 3.10+
+- System dependencies: build-essential (installed in Dockerfile)
+- **PyTorch**, **NumPy**, **SciPy**, **pandas**, **Matplotlib**, **WFDB**, **MNE**, **boto3**, **jupyterlab** (see `requirements.txt`)
+- **Docker** (for building and running containers)
 
 ### Setup
+Clone the repository and install dependencies locally or build the Docker image:
 ```bash
-git clone https://github.com/your-username/eeg_seizure_detection.git
+# Clone the project
+git clone https://github.com/ale-tomassini/eeg_seizure_detection.git
 cd eeg_seizure_detection
+
+# (Optional) Create a virtual environment and install requirements
 pip install -r requirements.txt
-docker build -t eeg-seizure .
+
+# Build the Docker image (using Python 3.12-slim-bookworm)
+docker build -t eeg-cnn .
 ```
 
 ### Data download
-This script uses boto3 to fetch CHB‑MIT and Siena datasets from PhysioNet public AWS S3 bucket. 
-Then it employs the WFDB Python toolkit to verify that each EDF file is readable.
+This script uses boto3 to fetch CHB‑MIT and Siena datasets from PhysioNet public AWS S3 bucket, 
+then validates each EDF with **WFDB**
 ```bash
-python scripts/download_data.py
+# Local install
+python scripts/download_data.py --out_dir data/raw
+
+# In Docker
+docker run --rm -v "$(pwd)/data/raw:/app/data/raw" eeg-cnn \
+  python scripts/download_data.py --out_dir data/raw
 ```
 ### Preprocessing
-Segment EEG recordings into fixed-length windows with labels for seizure detection.
-Uses MNE to load EDF files and to apply continuous EEG preprocessing:
-* band-pass filters (e.g., 0.5–1 Hz high-pass to remove slow drift, 35–70 Hz low-pass to remove muscle noise)
-* Notch filters (50/60 Hz) to suppress power-line interference.
-* Re-reference signals to an average reference to enhance signal localisation. 
-WFDB is used to read seizure annotations. The script applies spectrogram transform,
-and saves each window and its label as a compressed NumPy file. Window metadata is recorded in CSV, including channel
-names.
-
-**Note**: I chose not to apply artifact removal to the EEG because any attempt to filter out muscle, 
-blink, or cardiac noise risks erasing true ictal features since these artifacts share the same frequency bands and 
-waveforms as genuine epileptic activity, so aggressive cleaning could strip away critical seizure dynamics.
+Segment EEG recordings into fixed-length windows with labels.
+Applies MNE-based preprocessing on the raw signals before segmentation:
+* **band-pass filter**: 0.5–1 Hz high-pass to remove slow drift, 35–70 Hz low-pass to remove muscle noise
+* **Notch filter**: 50/60 Hz to suppress power-line interference.
+* **Re-referencing**: average reference to enhance signal localisation. 
+* **Annotations**: read with WFDB. 
+* **Spectrogram**
 
 ```bash
+# Local install
 python scripts/preprocess.py \
-  --input_dir data/raw/ \
-  --output_dir data/preprocessed/ \
+  --input_dir data/raw \
+  --output_dir data/preprocessed \
+  --metadata_csv metadata/windows.csv \
   --window_sec 5 \
   --overlap 0.5 \
   --to_spectrogram
+
+# In Docker
+docker run --rm -v "$(pwd)/data:/app/data" eeg-cnn \
+  python scripts/preprocess.py --input_dir data/raw --output_dir data/preprocessed --metadata_csv metadata/windows.csv --window_sec 5 --overlap 0.5 --to_spectrogram
 ```
 
+**Note**: I do not to apply not apply aggressive artifact-removal (e.g., blink, muscle or cardiac rejection) to preserve true seizure dynamics, since these artifacts share frequency bands with epileptic activity.
+
+
 ### Model training
+Train either a raw 1D-CNN or a spectrogram-based 2D-CNN with optional imbalance-aware sampling:
+
 #### 1D CNN (raw time-series)
 ```bash
+# 1D CNN (raw)
 python scripts/train.py \
   --model cnn1d \
   --data_dir data/preprocessed \
   --epochs 50 \
   --batch_size 64 \
   --use_sampler
-```
-#### 2D CNN (spectrograms)
-Change --model cnn2d_spectrogram.
 
-Both support weighted loss or imbalance-aware sampling.
+# 2D CNN (spectrogram)
+python scripts/train.py \
+  --model cnn2d \
+  --data_dir data/preprocessed \
+   --epochs 50 \
+   --batch_size 64 \
+  --use_sampler
+
+```
+
+In Docker:
+```bash
+docker run --rm -v "$(pwd)/data/preprocessed:/app/data/preprocessed" eeg-cnn \
+  python scripts/train.py --model cnn1d --data_dir data/preprocessed --epochs 50 --batch_size 64 --use_sampler
+```
 
 ### Evaluation
+Generate performance metrics and visualizations:
+
 ```bash
+# Local install
 python scripts/evaluate.py \
-  --model_path models/best_model.pth \
+  --model_path models/best_cnn1d.pth \
   --data_dir data/preprocessed
+
+# In Docker
+docker run --rm -v "$(pwd)/data/preprocessed:/app/data/preprocessed" eeg-cnn \
+  python scripts/evaluate.py --model_path models/best_cnn1d.pth --data_dir data/preprocessed
 ```
 ### Interpretability
-Outputs saliency and Grad‑CAM visualizations for both raw and spectrogram inputs.
-python scripts/visualise.py \
+Produce saliency maps and Grad‑CAM visualizations for both raw 1D signals and spectrogram inputs:
+```bash
+# Local install
+python scripts/visualize.py \
   --model_path models/best_model.pth \
   --data_dir data/preprocessed \
   --method grad_cam
+```
+# In Docker
+docker run --rm -v "$(pwd)/data/preprocessed:/app/data/preprocessed" eeg-cnn \
+  python scripts/visualize.py --model_path models/best_model.pth --data_dir data/preprocessed --method grad_cam
+
+### Notebooks (Jupyter)
+You can run the notebooks interactively within the container or locally;
+```bash
+# Launch Jupyter Lab in Docker
+docker run -it --rm -p 8888:8888 -v "$(pwd):/app" eeg-cnn
+# Then open http://localhost:8888 in your browser (no token required)
+```
+Notebooks are located under `notebooks/`:
+
+* `01_explore_data.ipynb`
+* `02_preprocessing.ipynb`
+* `03_train_cnn1d.ipynb`
+* `04_train_cnn2d.ipynb`
+* `05_interpretability.ipynb`
 
 ### Results
 * Compare 1D vs. 2D CNNs.
