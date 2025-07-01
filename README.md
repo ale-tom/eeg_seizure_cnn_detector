@@ -54,20 +54,22 @@ eeg_seizure_detection/
 
 ## Datasets
 
-### CHB‑MIT Scalp EEG Database  
-- 22 pediatric subjects, 182 annotated seizures, EDF format, sampled at 256 Hz.  
+### Children's Hospital Boston(CHB) MIT Scalp EEG Dataset  
+- 22 pediatric subjects with long interictal and ictal EEG recordings, 182 annotated seizures, EDF format, sampled at 256 Hz.  
+- 22 channels (10-20 montage) in each EDF file.
 - Approximately 42 GB; includes detailed seizure onset/offset annotations in `.seizure` files.  
-- Ideal for seizure onset detection research.
+
 
 ### Siena Scalp EEG Database  
-- 14 adult subjects (ages 20–71), 47 seizures, sampled at 512 Hz.  
-- Approximately 20 GB; includes EEG + ECG and expert-annotated events.
+- 14 adult subjects (ages 20–71) with long interictal and ictal EEG recordings, 47 annotated seizures, sampled at 512 Hz.  
+- Variable number of channels (10-20 monatage) between subjects.
+- Approximately 20 GB; includes EEG + ECG (1 subject) + Vagal nerve stimulation (1 subject) and expert-annotated events.
 
 ## Getting started
 
 ### Prerequisites
-- Python 3.8+  
-- PyTorch, numpy, scipy, matplotlib, librosa, MNE (see `requirements.txt`)
+- Python 3.10+  
+- PyTorch, numpy, scipy, matplotlib, wfdb, MNE (see `requirements.txt`)
 
 ### Setup
 ```bash
@@ -78,12 +80,21 @@ docker build -t eeg-seizure .
 ```
 
 ### Data download
-This fetches CHB‑MIT and Siena datasets from PhysioNet and structures them under data/raw/.
+This script uses boto3 to fetch CHB‑MIT and Siena datasets from PhysioNet public AWS S3 bucket. 
+Then it employs the WFDB Python toolkit to verify that each EDF file is readable.
 ```bash
 python scripts/download_data.py
 ```
 ### Preprocessing
-Segments EEG into fixed-length windows and optionally computes spectrogram tensors.
+Segment EEG recordings into fixed-length windows with labels for seizure detection.
+Uses MNE to load EDF files and to apply continuous EEG preprocessing:
+* band-pass filters (e.g., 0.5–1 Hz high-pass to remove slow drift, 35–70 Hz low-pass to remove muscle noise)
+* Notch filters (50/60 Hz) to suppress power-line interference.
+* Re-reference signals to an average reference to enhance signal localisation. 
+WFDB is used to read seizure annotations. The script applies spectrogram transform,
+and saves each window and its label as a compressed NumPy file. Window metadata is recorded in CSV, including channel
+names.
+
 ```bash
 python scripts/preprocess.py \
   --input_dir data/raw/ \
