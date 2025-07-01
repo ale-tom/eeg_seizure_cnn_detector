@@ -175,11 +175,10 @@ python scripts/visualize.py \
   --model_path models/best_model.pth \
   --data_dir data/preprocessed \
   --method grad_cam
-```
 # In Docker
 docker run --rm -v "$(pwd)/data/preprocessed:/app/data/preprocessed" eeg-cnn \
   python scripts/visualize.py --model_path models/best_model.pth --data_dir data/preprocessed --method grad_cam
-
+```
 ### Notebooks (Jupyter)
 You can run the notebooks interactively within the container or locally;
 ```bash
