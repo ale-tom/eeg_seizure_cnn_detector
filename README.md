@@ -95,6 +95,10 @@ WFDB is used to read seizure annotations. The script applies spectrogram transfo
 and saves each window and its label as a compressed NumPy file. Window metadata is recorded in CSV, including channel
 names.
 
+*Note*:I chose not to apply artifact removal during the seizure recordings because any attempt to filter out muscle, 
+blink, or cardiac noise risks erasing true ictal features since these artifacts share the same frequency bands and 
+waveforms as genuine epileptic activity, so aggressive cleaning could strip away critical seizure dynamics.
+
 ```bash
 python scripts/preprocess.py \
   --input_dir data/raw/ \
