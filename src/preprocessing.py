@@ -43,6 +43,10 @@ def segment_signal(
     Segment multi-channel signal into windows, assign labels, and collect metadata.
     Returns arrays of windowed data, binary labels, and a list of metadata dicts.
     """
+    # Validate overlap
+    if not (0 <= overlap < 1):
+        raise ValueError(f"overlap must be in [0,1), got {overlap}")
+
     window_len = int(window_sec * fs)
     step = int(window_len * (1 - overlap))
     segments, labels = [], []
