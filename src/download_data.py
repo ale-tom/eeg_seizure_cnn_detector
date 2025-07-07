@@ -10,6 +10,7 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 import wfdb
+import mne
 
 # Public S3 bucket and dataset prefixes
 BUCKET_NAME = "physionet-open"  # PhysioNet Open Data on AWS
@@ -39,12 +40,11 @@ def download_prefix(bucket: str, prefix: str, out_dir: Path) -> None:
 
 def validate_edf(edf_path: Path) -> bool:
     """
-    Attempt to read header info from an EDF file using WFDB.
-    Returns True if successful, False otherwise.
+    Validates whether an EDF file is readable by attempting to parse its header using MNE.
+    Returns True if the file can be read without loading the full signal data, otherwise False.
     """
     try:
-        # read header only for speed
-        wfdb.io.read_edf(str(edf_path), header_only=True)
+        mne.io.read_raw_edf(edf_path, preload=False, verbose=False)
         return True
     except Exception as e:
         print(f"[ERROR] Could not read {edf_path.name}: {e}")
